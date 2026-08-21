@@ -32,8 +32,23 @@ jobs:
       - name: Clone.
         uses: actions/checkout@v7
         with:
-          submodules: recursive
+          submodules: false
           path: ${{ env.TBUILD }}\${{ env.REPO_NAME }}
+
+      - name: Submodules.
+        shell: bash
+        run: |
+          cd "$TBUILD/$REPO_NAME"
+          # Top-level submodules are all on GitHub — init them (non-recursive first).
+          git submodule update --init --force
+          # cmake_helpers pulls a Linux-only glib/cppgir submodule from gitlab.com, which
+          # 403s on CI runners and is unused on Windows. Disable it in every .gitmodules
+          # so the recursive init below skips it instead of aborting the whole checkout.
+          find . -name .gitmodules -print0 | while IFS= read -r -d '' gm; do
+            key=$(git config -f "$gm" --get-regexp 'submodule\..*\.url' 2>/dev/null | awk '/gitlab\.com\/mnauw\/cppgir/{print $1}')
+            if [ -n "$key" ]; then git config -f "$gm" "${key%.url}.update" none; echo "disabled cppgir in $gm"; fi
+          done
+          git submodule update --init --force --recursive
 
       - name: First set up.
         shell: bash
