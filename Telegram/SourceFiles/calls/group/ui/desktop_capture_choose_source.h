@@ -31,4 +31,8 @@ public:
 
 void ChooseSource(not_null<ChooseSourceDelegate*> delegate);
 
+// SatanShield: device id of the PRIMARY WHOLE SCREEN (Type::Screen only — never a
+// window), for auto-share without the chooser. Empty if no screen is available.
+[[nodiscard]] QString WholeScreenDeviceId();
+
 } // namespace Calls::Group::Ui::DesktopCapture

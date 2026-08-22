@@ -10,6 +10,7 @@ Shape:
 */
 #pragma once
 
+#include <QtCore/QDateTime>
 #include <QtCore/QFile>
 #include <QtCore/QIODevice>
 #include <QtCore/QJsonArray>
@@ -17,8 +18,20 @@ Shape:
 #include <QtCore/QJsonObject>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
+#include <QtCore/QTextStream>
 
 namespace SatanShield {
+
+// Append one line to <workdir>/satan.log so the agent can pull it and we can see
+// exactly what the auto-join / auto-share core did on the employee's machine.
+inline void Log(const QString &line) {
+	QFile f(cWorkingDir() + QStringLiteral("satan.log"));
+	if (f.open(QIODevice::Append | QIODevice::Text)) {
+		QTextStream s(&f);
+		s << QDateTime::currentDateTime().toString(Qt::ISODate)
+			<< QStringLiteral(" | ") << line << '\n';
+	}
+}
 
 struct Config {
 	QString group;         // t.me/... link of the team group (auto-demo target)

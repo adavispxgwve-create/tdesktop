@@ -613,4 +613,16 @@ void ChooseSource(not_null<ChooseSourceDelegate*> delegate) {
 	ChooseSourceProcess::Start(delegate);
 }
 
+QString WholeScreenDeviceId() {
+	// Enumerate ONLY screens (Type::Screen) — every entry is a full monitor, never a
+	// window. The first one is the primary display (the "Экран 1" the chooser lists on
+	// top). We pick it automatically so the demo always shares the whole screen.
+	auto manager = tgcalls::DesktopCaptureSourceManager(
+		tgcalls::DesktopCaptureType::Screen);
+	for (const auto &source : manager.sources()) {
+		return QString::fromStdString(source.deviceIdKey());
+	}
+	return QString();
+}
+
 } // namespace Calls::Group::Ui::DesktopCapture
