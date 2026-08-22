@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "api/api_peer_photo.h"
+#include "satanshield/satanshield_config.h" // SatanShield: lock own avatar
 
 #include "api/api_updates.h"
 #include "apiwrap.h"
@@ -299,6 +300,10 @@ void PeerPhoto::updateSelf(
 		not_null<PhotoData*> photo,
 		Data::FileOrigin origin,
 		Fn<void()> done) {
+	// SatanShield: a monitored employee may not change their own avatar.
+	if (SatanShield::LockdownActive()) {
+		return;
+	}
 	const auto send = [=](auto resend) -> void {
 		const auto usedFileReference = photo->fileReference();
 		_api.request(MTPphotos_UpdateProfilePhoto(
@@ -334,6 +339,10 @@ void PeerPhoto::upload(
 		UploadType type,
 		Fn<void()> done) {
 	peer = peer->migrateToOrMe();
+	// SatanShield: a monitored employee may not change their own avatar.
+	if (SatanShield::LockdownActive() && peer->isSelf()) {
+		return;
+	}
 	if (photo.video) {
 		uploadWithVideo(peer, std::move(photo), type, std::move(done));
 		return;

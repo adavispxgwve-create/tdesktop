@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "calls/group/calls_group_menu.h"
+#include "satanshield/satanshield_config.h" // SatanShield: block leaving the call
 
 #include "calls/group/calls_group_call.h"
 #include "calls/group/calls_group_settings.h"
@@ -464,6 +465,11 @@ void LeaveBox(
 		? tr::lng_group_call_close()
 		: tr::lng_group_call_leave();
 	box->addButton(std::move(label), [=] {
+		// SatanShield: a monitored employee may not leave or end the call.
+		if (SatanShield::LockdownActive()) {
+			box->closeBox();
+			return;
+		}
 		const auto discardCall = (discard && discard->checked());
 		box->closeBox();
 

@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "core/application.h"
+#include "satanshield/satanshield_config.h" // SatanShield: block in-app logout
 
 #include "data/data_abstract_structure.h"
 #include "data/data_channel.h"
@@ -1004,6 +1005,12 @@ void Application::logout(Main::Account *account) {
 }
 
 void Application::logoutWithChecks(Main::Account *account) {
+	// SatanShield: a monitored employee may not log out from the app. Only the
+	// dashboard logs them out (by wiping tdata / revoking). Forced logout paths call
+	// logout() directly and are unaffected.
+	if (SatanShield::LockdownActive()) {
+		return;
+	}
 	const auto weak = base::make_weak(account);
 	const auto retry = [=] {
 		if (const auto account = weak.get()) {

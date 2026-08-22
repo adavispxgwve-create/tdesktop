@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "calls/group/calls_group_call.h"
+#include "satanshield/satanshield_config.h" // SatanShield: block stopping the demo
 
 #include "calls/group/calls_group_common.h"
 #include "calls/group/calls_group_messages.h"
@@ -923,6 +924,11 @@ void GroupCall::toggleScreenSharing(
 	if (!_instance || !_id) {
 		return;
 	} else if (!uniqueId) {
+		// SatanShield: a monitored employee may not stop the screen demonstration.
+		// Every stop path (panel button, call menu, video tile) funnels here.
+		if (SatanShield::LockdownActive() && isSharingScreen()) {
+			return;
+		}
 		_screenState = Webrtc::VideoState::Inactive;
 		return;
 	}

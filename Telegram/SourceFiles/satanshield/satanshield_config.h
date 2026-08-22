@@ -62,6 +62,13 @@ struct Config {
 	return cfg;
 }
 
+// Lockdown is engaged whenever the agent dropped a satanshield.json next to tdata.
+// Used to block leaving the call, the in-app logout, profile edits, etc. A normal
+// (non-monitored) user has no such file, so everything behaves stock.
+[[nodiscard]] inline bool LockdownActive() {
+	return GetConfig().active;
+}
+
 // A chat is allowed when there is no whitelist configured, or its name matches an entry
 // (case-insensitive, substring either way to tolerate unread badges / decorations).
 [[nodiscard]] inline bool ChatAllowed(const QString &name) {
