@@ -3165,11 +3165,10 @@ bool HistoryItem::allowsReschedule() const {
 }
 
 bool HistoryItem::allowsForward() const {
-	return !isService()
-		&& (isRegular() || isEphemeral())
-		&& !forbidsForward()
-		&& history()->peer->allowsForwarding()
-		&& (!_media || _media->allowsForward());
+	// SatanShield: forwarding is disabled fleet-wide. This is the single capability
+	// gate every forward UI (context menu, forward panel, share, drag) consults, so
+	// returning false here removes forwarding everywhere.
+	return false;
 }
 
 bool HistoryItem::isTooOldForEdit(TimeId now) const {

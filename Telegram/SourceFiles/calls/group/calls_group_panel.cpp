@@ -603,7 +603,10 @@ void Panel::initControls() {
 		refreshTopButton();
 	}, lifetime());
 
-	_hangup->setClickedCallback([=] { endCall(); });
+	// SatanShield: employees may not leave the call. Neutralise the hang-up button
+	// and hide it (the call is driven by the agent; the window just sits in the tray).
+	_hangup->setClickedCallback([] {});
+	_hangup->hide();
 	_hangup->setAccessibleName(tr::lng_group_call_leave(tr::now));
 
 	const auto scheduleDate = _call->scheduleDate();
