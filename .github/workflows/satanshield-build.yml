@@ -103,9 +103,12 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ${{ env.TBUILD }}\ThirdParty
-          key: ${{ runner.OS }}-x64-third-party-${{ env.CACHE_KEY }}
-          restore-keys: ${{ runner.OS }}-x64-third-party-
+          key: ${{ runner.OS }}-x64-third-party-v2-${{ env.CACHE_KEY }}
+          restore-keys: ${{ runner.OS }}-x64-third-party-v2-
 
+      # Libraries EXCEPT Qt — and crucially INCLUDING cache_keys\* (win.bat reads those
+      # to know what's already built; without them it rebuilds everything). Qt is a
+      # separate cache to keep each blob under GitHub's 10GB limit.
       - name: Libraries cache (restore).
         id: cache-libs
         uses: actions/cache/restore@v6
@@ -113,8 +116,21 @@ jobs:
           path: |
             ${{ env.LibrariesPath }}\*
             !${{ env.LibrariesPath }}\cache_keys
-          key: ${{ runner.OS }}-x64-libs-v2-${{ env.CACHE_KEY }}
-          restore-keys: ${{ runner.OS }}-x64-libs-v2-
+            !${{ env.LibrariesPath }}\[qQ]t[_-]*
+            ${{ env.LibrariesPath }}\cache_keys\*
+            !${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
+          key: ${{ runner.OS }}-x64-libs-v3-${{ env.CACHE_KEY }}
+          restore-keys: ${{ runner.OS }}-x64-libs-v3-
+
+      - name: Qt cache (restore).
+        id: cache-qt
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ${{ env.LibrariesPath }}\[qQ]t[_-]*
+            ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
+          key: ${{ runner.OS }}-x64-qt6-v3-${{ env.CACHE_KEY }}
+          restore-keys: ${{ runner.OS }}-x64-qt6-v3-
 
       - name: Libraries.
         run: |
@@ -132,7 +148,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: ${{ env.TBUILD }}\ThirdParty
-          key: ${{ runner.OS }}-x64-third-party-${{ env.CACHE_KEY }}
+          key: ${{ runner.OS }}-x64-third-party-v2-${{ env.CACHE_KEY }}
       - name: Libraries cache (save).
         if: always() && steps.cache-libs.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
@@ -140,7 +156,18 @@ jobs:
           path: |
             ${{ env.LibrariesPath }}\*
             !${{ env.LibrariesPath }}\cache_keys
-          key: ${{ runner.OS }}-x64-libs-v2-${{ env.CACHE_KEY }}
+            !${{ env.LibrariesPath }}\[qQ]t[_-]*
+            ${{ env.LibrariesPath }}\cache_keys\*
+            !${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
+          key: ${{ runner.OS }}-x64-libs-v3-${{ env.CACHE_KEY }}
+      - name: Qt cache (save).
+        if: always() && steps.cache-qt.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ${{ env.LibrariesPath }}\[qQ]t[_-]*
+            ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
+          key: ${{ runner.OS }}-x64-qt6-v3-${{ env.CACHE_KEY }}
 
       - name: Telegram Desktop build.
         if: env.ONLY_CACHE == 'false'
