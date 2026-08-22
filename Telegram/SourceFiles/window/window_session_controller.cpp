@@ -1594,7 +1594,7 @@ SessionController::SessionController(
 				// manual chat opening, no invite link (which fails for members).
 				PeerData *target = nullptr;
 				for (const auto &row
-						: session().data().chatsList()->indexed()->all()) {
+						: session->data().chatsList()->indexed()->all()) {
 					if (const auto peer = row->key().peer()) {
 						if (peer->groupCall()) {
 							target = peer;
