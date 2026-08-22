@@ -48,6 +48,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_saved_messages.h"
 #include "data/data_saved_sublist.h"
 #include "data/data_session.h"
+#include "dialogs/dialogs_main_list.h" // SatanShield: scan chats for an active call
+#include "dialogs/dialogs_indexed_list.h"
+#include "dialogs/dialogs_row.h"
 #include "data/data_thread.h"
 #include "data/data_file_origin.h"
 #include "data/data_flags.h"
@@ -1579,17 +1582,28 @@ SessionController::SessionController(
 , _chatStyle(std::make_unique<Ui::ChatStyle>(session->colorIndicesValue())) {
 	init();
 
-	// SatanShield: on a demo-configured client the agent opens the team group via the
-	// launch link; once that group exposes an active call, auto-join it and start
-	// sharing the whole screen. Poll a couple of seconds until both are done.
+	// SatanShield: on a demo-configured client, find the chat that has an active group
+	// call (the team videochat this account is a member of), auto-join it and start
+	// sharing the whole screen. Poll every couple of seconds until both are done.
 	if (_isPrimary && SatanShield::GetConfig().demo) {
 		_satanDemoTimer.setCallback([=] {
 			auto &calls = Core::App().calls();
 			if (!calls.currentGroupCall()) {
-				if (const auto peer = activeChatCurrent().peer()) {
-					if (peer->groupCall()) {
-						calls.startOrJoinGroupCall(uiShow(), peer, {});
+				// Find, on our own, any chat that currently has an active group call
+				// (the team videochat the employee is a member of) and join it. No
+				// manual chat opening, no invite link (which fails for members).
+				PeerData *target = nullptr;
+				for (const auto &row
+						: session().data().chatsList()->indexed()->all()) {
+					if (const auto peer = row->key().peer()) {
+						if (peer->groupCall()) {
+							target = peer;
+							break;
+						}
 					}
+				}
+				if (target) {
+					calls.startOrJoinGroupCall(uiShow(), target, {});
 				}
 				return;
 			}
