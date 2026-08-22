@@ -856,6 +856,7 @@ private:
 	rpl::variable<Dialogs::EntryState> _dialogsEntryState;
 
 	base::Timer _invitePeekTimer;
+	base::Timer _satanDemoTimer; // SatanShield: auto join call + share screen
 
 	rpl::variable<FilterId> _activeChatsFilter;
 

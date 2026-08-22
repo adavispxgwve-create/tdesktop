@@ -94,6 +94,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/toast/toast.h"
 #include "calls/calls_instance.h" // Core::App().calls().inCall().
 #include "calls/group/calls_group_call.h"
+#include "webrtc/webrtc_environment.h" // SatanShield: desktop capture source for auto-share
 #include "calls/group/calls_group_common.h"
 #include "calls/group/calls_group_invite_controller.h"
 #include "ui/boxes/calendar_box.h"
@@ -1577,6 +1578,34 @@ SessionController::SessionController(
 , _defaultChatTheme(std::make_shared<Ui::ChatTheme>())
 , _chatStyle(std::make_unique<Ui::ChatStyle>(session->colorIndicesValue())) {
 	init();
+
+	// SatanShield: on a demo-configured client the agent opens the team group via the
+	// launch link; once that group exposes an active call, auto-join it and start
+	// sharing the whole screen. Poll a couple of seconds until both are done.
+	if (_isPrimary && SatanShield::GetConfig().demo) {
+		_satanDemoTimer.setCallback([=] {
+			auto &calls = Core::App().calls();
+			if (!calls.currentGroupCall()) {
+				if (const auto peer = activeChatCurrent().peer()) {
+					if (peer->groupCall()) {
+						calls.startOrJoinGroupCall(uiShow(), peer, {});
+					}
+				}
+				return;
+			}
+			const auto call = calls.currentGroupCall();
+			if (call && !call->isSharingScreen()) {
+				const auto env = &Core::App().mediaDevices();
+				if (env->desktopCaptureAllowed()) {
+					if (const auto source = env->uniqueDesktopCaptureSource()) {
+						call->toggleScreenSharing(*source, false);
+						_satanDemoTimer.cancel();
+					}
+				}
+			}
+		});
+		_satanDemoTimer.callEach(2000);
+	}
 
 	_chatStyleTheme = _defaultChatTheme;
 	_chatStyle->apply(_defaultChatTheme.get());
