@@ -746,7 +746,7 @@ void Panel::refreshVideoButtons(std::optional<bool> overrideWideMode) {
 			hideStickedTooltip(
 				StickedTooltip::Camera,
 				StickedTooltipHide::Activated);
-			_call->toggleVideo(!_call->isSharingCamera());
+			if (!_call->isSharingCamera()) _call->toggleVideo(true); // SatanShield: no stop-video
 		});
 		_video->setAccessibleName(tr::lng_call_start_video(tr::now));
 		_video->setColorOverrides(
@@ -768,6 +768,10 @@ void Panel::refreshVideoButtons(std::optional<bool> overrideWideMode) {
 		_screenShare.create(widget(), st::groupCallScreenShareSmall);
 		_screenShare->show();
 		_screenShare->setClickedCallback([=] {
+			// SatanShield: may start sharing, never stop it.
+			if (_call->isSharingScreen()) {
+				return;
+			}
 			chooseShareScreenSource();
 		});
 		_screenShare->setAccessibleName(tr::lng_group_call_screen_share_start(tr::now));

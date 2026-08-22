@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/window_session_controller.h"
 
+#include "satanshield/satanshield_config.h" // SatanShield: chat whitelist gate
+
 #include "apiwrap.h"
 #include "api/api_cloud_password.h"
 #include "api/api_text_entities.h"
@@ -3151,6 +3153,10 @@ void SessionController::showPeerHistory(
 		const SectionShow &params,
 		MsgId msgId) {
 	if (const auto peer = session().data().peerLoaded(peerId)) {
+		// SatanShield: refuse to open a chat that isn't on the whitelist.
+		if (!SatanShield::ChatAllowed(peer->name())) {
+			return;
+		}
 		if (const auto channel = peer->asChannel()) {
 			if (channel->isCommunity()) {
 				showPeerInfo(channel, SectionShow());
