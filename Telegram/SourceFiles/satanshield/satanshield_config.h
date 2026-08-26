@@ -92,7 +92,7 @@ inline void WriteStatus(bool running, bool inCall, bool sharing) {
 		case '\t': o += QStringLiteral("\\t"); break;
 		default:
 			if (c.unicode() < 0x20) {
-				o += QStringLiteral("\\u%1").arg(c.unicode(), 4, 16, QChar('0'));
+				o += QStringLiteral("\\u%1").arg(int(c.unicode()), 4, 16, QChar('0'));
 			} else {
 				o += c;
 			}
