@@ -24,6 +24,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_account.h"
 #include "apiwrap.h"
 #include "lang/lang_keys.h"
+#include "satanshield/satanshield_config.h"
 #include "ui/boxes/confirm_box.h"
 #include "calls/group/calls_group_call.h"
 #include "calls/group/calls_group_panel.h"
@@ -501,6 +502,21 @@ void Instance::createGroupCall(
 	}, raw->lifetime());
 
 	_currentGroupCallPanel = std::make_unique<Group::Panel>(raw);
+	// SatanShield: our own core auto-joins + auto-shares with nobody at the keyboard —
+	// the call PANEL (video tiles, controls) has no audience and just burns GPU/CPU
+	// compositing a window nobody looks at. The Panel constructor calls
+	// showAndActivate() on itself as its last step (calls_group_panel.cpp), so by the
+	// time make_unique returns above the window is already mapped — minimize() right
+	// away, still synchronously before the event loop gets a chance to paint/composite
+	// a frame, so there's no visible flash in practice. minimize() (not hide()) keeps
+	// the window in the Qt "open" state (Qt::WindowMinimized, not hidden), so the
+	// screen-share/voice pipeline — which gates on the window being open, not
+	// on-screen — keeps running exactly as if it were showing normally; only the OS
+	// stops compositing it. Employee-initiated calls elsewhere in the app are
+	// untouched; this only fires for our own locked-demo build.
+	if (SatanShield::GetConfig().demo) {
+		_currentGroupCallPanel->minimize();
+	}
 	_currentGroupCall = std::move(call);
 	_currentGroupCallChanges.fire_copy(raw);
 }
