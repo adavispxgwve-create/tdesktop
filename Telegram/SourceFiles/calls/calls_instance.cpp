@@ -26,6 +26,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "satanshield/satanshield_config.h"
 #include "ui/boxes/confirm_box.h"
+#include "ui/widgets/rp_window.h" // SatanShield: full Ui::RpWindow def for ->hide()
 #include "calls/group/calls_group_call.h"
 #include "calls/group/calls_group_panel.h"
 #include "calls/calls_call.h"
