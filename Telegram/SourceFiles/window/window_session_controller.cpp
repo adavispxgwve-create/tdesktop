@@ -1632,7 +1632,7 @@ SessionController::SessionController(
 		// Track how long the SAME call object has gone without reaching Joined; past
 		// the timeout, hang it up ourselves so currentGroupCall() goes null on a
 		// later tick and the loop above naturally rescans and joins fresh.
-		const auto connectingCall = std::make_shared<GroupCall*>(nullptr);
+		const auto connectingCall = std::make_shared<Calls::GroupCall*>(nullptr);
 		const auto connectingSince = std::make_shared<crl::time>(0);
 		constexpr auto kConnectTimeoutMs = crl::time(20000);
 		_satanDemoTimer.setCallback([=] {
@@ -1643,7 +1643,7 @@ SessionController::SessionController(
 			// Report live state to the agent every tick (running / in call / sharing).
 			SatanShield::WriteStatus(true, inCall, sharing);
 
-			if (inCall && call->state() != GroupCall::State::Joined) {
+			if (inCall && call->state() != Calls::GroupCall::State::Joined) {
 				if (*connectingCall != call) {
 					*connectingCall = call;
 					*connectingSince = crl::now();
