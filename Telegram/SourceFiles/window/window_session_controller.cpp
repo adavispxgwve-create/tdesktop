@@ -1650,7 +1650,13 @@ SessionController::SessionController(
 					// The active-call flag only appears once the group's FULL info is
 					// loaded, which normally waits until the employee opens the chat.
 					// Force it so we can find and join the call with no manual click.
-					if ((peer->isChat() || peer->isMegagroup())
+					// NOTE: isMegagroup() alone missed plain broadcast Channels (video
+					// chats/live streams work there too) — the team call groups turned
+					// out to be Channels, so the call's groupCall() flag never loaded
+					// and target stayed null on every account, every tick, forever.
+					// isChannel() covers megagroups AND broadcast channels; isChat()
+					// still covers old-style basic (non-super) groups.
+					if ((peer->isChat() || peer->isChannel())
 							&& requestedFull->emplace(peer).second) {
 						peer->updateFull();
 					}
