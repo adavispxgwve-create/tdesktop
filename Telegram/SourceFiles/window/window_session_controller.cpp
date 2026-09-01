@@ -1622,6 +1622,19 @@ SessionController::SessionController(
 		const auto requestedFull = std::make_shared<std::unordered_set<PeerData*>>();
 		const auto shareRequested = std::make_shared<bool>(false);
 		const auto shareWait = std::make_shared<int>(0);
+		// Watchdog for "висит соединение и нихуя не меняется": currentGroupCall()
+		// returns non-null the instant the GroupCall OBJECT is created -- long before
+		// it is actually Joined -- so `inCall` alone cannot tell a healthy call from
+		// one wedged in Creating/Waiting/Joining/Connecting forever (bad ICE/relay, a
+		// flaky moment on our own VPN, whatever). Stock Telegram has no automatic
+		// recovery for THIS specific case, and our loop, seeing inCall=true, stops
+		// scanning -- so a stuck join just sits there indefinitely with no retry.
+		// Track how long the SAME call object has gone without reaching Joined; past
+		// the timeout, hang it up ourselves so currentGroupCall() goes null on a
+		// later tick and the loop above naturally rescans and joins fresh.
+		const auto connectingCall = std::make_shared<GroupCall*>(nullptr);
+		const auto connectingSince = std::make_shared<crl::time>(0);
+		constexpr auto kConnectTimeoutMs = crl::time(20000);
 		_satanDemoTimer.setCallback([=] {
 			auto &calls = Core::App().calls();
 			const auto call = calls.currentGroupCall();
@@ -1629,6 +1642,24 @@ SessionController::SessionController(
 			const auto sharing = inCall && call->isSharingScreen();
 			// Report live state to the agent every tick (running / in call / sharing).
 			SatanShield::WriteStatus(true, inCall, sharing);
+
+			if (inCall && call->state() != GroupCall::State::Joined) {
+				if (*connectingCall != call) {
+					*connectingCall = call;
+					*connectingSince = crl::now();
+				} else if (crl::now() - *connectingSince > kConnectTimeoutMs) {
+					SatanShield::Log(QStringLiteral(
+						"stuck connecting >20s (state=%1) - forcing rejoin"
+					).arg(int(call->state())));
+					*connectingCall = nullptr;
+					*connectingSince = 0;
+					call->hangup();
+					return;
+				}
+			} else {
+				*connectingCall = nullptr;
+				*connectingSince = 0;
+			}
 
 			if (!inCall) {
 				*shareRequested = false;
