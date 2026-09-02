@@ -465,8 +465,10 @@ void LeaveBox(
 		? tr::lng_group_call_close()
 		: tr::lng_group_call_leave();
 	box->addButton(std::move(label), [=] {
-		// SatanShield: a monitored employee may not leave or end the call.
-		if (SatanShield::LockdownActive()) {
+		// SatanShield: a monitored employee may not leave or end the call
+		// during work hours (outside them this no longer blocks - see
+		// CallLockdownActive()).
+		if (SatanShield::CallLockdownActive()) {
 			box->closeBox();
 			return;
 		}

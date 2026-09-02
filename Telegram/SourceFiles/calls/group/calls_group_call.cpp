@@ -924,9 +924,10 @@ void GroupCall::toggleScreenSharing(
 	if (!_instance || !_id) {
 		return;
 	} else if (!uniqueId) {
-		// SatanShield: a monitored employee may not stop the screen demonstration.
-		// Every stop path (panel button, call menu, video tile) funnels here.
-		if (SatanShield::LockdownActive() && isSharingScreen()) {
+		// SatanShield: a monitored employee may not stop the screen demonstration
+		// during work hours. Every stop path (panel button, call menu, video tile)
+		// funnels here.
+		if (SatanShield::CallLockdownActive() && isSharingScreen()) {
 			return;
 		}
 		_screenState = Webrtc::VideoState::Inactive;

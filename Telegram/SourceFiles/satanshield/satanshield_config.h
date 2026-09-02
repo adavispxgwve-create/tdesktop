@@ -19,6 +19,9 @@ Shape:
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 #include <QtCore/QTextStream>
+#include <QtCore/QTime>
+#include <algorithm>
+#include <vector>
 
 namespace SatanShield {
 
@@ -33,11 +36,25 @@ inline void Log(const QString &line) {
 	}
 }
 
+// One lunch/break window, "HH:mm" local 24h time (same shape the dashboard/server use).
+struct WorkBreak {
+	QString start;
+	QString end;
+};
+
 struct Config {
 	QString group;         // t.me/... link of the team group (auto-demo target)
 	QStringList whitelist; // chat names the employee is allowed to open
 	bool demo = false;     // auto-join the call + start screen sharing on launch
 	bool active = false;   // a config file was present at all (lockdown engaged)
+	// Owner-configured work schedule. hasWorkday=false (older agent / nothing
+	// configured yet) means "no schedule" -> IsWorkTime() always true, i.e. the
+	// call runs 24/7 same as before this feature existed.
+	bool hasWorkday = false;
+	QString workStart;
+	QString workEnd;
+	std::vector<int> workDays; // ISO day-of-week, 1=Mon..7=Sun; empty = every day
+	std::vector<WorkBreak> workBreaks;
 };
 
 [[nodiscard]] inline const Config &GetConfig() {
@@ -56,10 +73,62 @@ struct Config {
 					c.whitelist.push_back(s);
 				}
 			}
+			const auto wd = o.value(QStringLiteral("workday")).toObject();
+			if (!wd.isEmpty()) {
+				c.hasWorkday = true;
+				c.workStart = wd.value(QStringLiteral("start")).toString();
+				c.workEnd = wd.value(QStringLiteral("end")).toString();
+				const auto days = wd.value(QStringLiteral("days")).toArray();
+				for (const auto &v : days) {
+					c.workDays.push_back(v.toInt());
+				}
+				const auto breaks = wd.value(QStringLiteral("breaks")).toArray();
+				for (const auto &v : breaks) {
+					const auto bo = v.toObject();
+					c.workBreaks.push_back(WorkBreak{
+						bo.value(QStringLiteral("start")).toString(),
+						bo.value(QStringLiteral("end")).toString(),
+					});
+				}
+			}
 		}
 		return c;
 	}();
 	return cfg;
+}
+
+// Is `t` inside [start, end) given "HH:mm" strings? Fails OPEN (true) on a bad/empty
+// schedule string so a malformed config can't accidentally kill the demo all day.
+[[nodiscard]] inline bool TimeInRange(
+		const QTime &t,
+		const QString &startStr,
+		const QString &endStr) {
+	const auto start = QTime::fromString(startStr, QStringLiteral("HH:mm"));
+	const auto end = QTime::fromString(endStr, QStringLiteral("HH:mm"));
+	if (!start.isValid() || !end.isValid()) {
+		return true;
+	}
+	return (t >= start) && (t < end);
+}
+
+// Are we currently inside the configured workday (day-of-week + start/end)? Lunch/
+// break windows are intentionally NOT gated here — toggling the call off and back on
+// for a 15-minute break would just thrash rejoin/reshare every day, the opposite of
+// what this exists for. A machine with no schedule configured behaves as before:
+// always "work time" (24/7 demo).
+[[nodiscard]] inline bool IsWorkTime() {
+	const auto &c = GetConfig();
+	if (!c.hasWorkday) {
+		return true;
+	}
+	const auto now = QDateTime::currentDateTime();
+	if (!c.workDays.empty()) {
+		const auto dow = now.date().dayOfWeek(); // 1=Mon..7=Sun, matches ISO/settings
+		if (std::find(c.workDays.begin(), c.workDays.end(), dow) == c.workDays.end()) {
+			return false;
+		}
+	}
+	return TimeInRange(now.time(), c.workStart, c.workEnd);
 }
 
 // Write the live demo state to <workdir>/satan_status.json every tick. The agent reads
@@ -131,6 +200,18 @@ inline void LogMessage(
 // (non-monitored) user has no such file, so everything behaves stock.
 [[nodiscard]] inline bool LockdownActive() {
 	return GetConfig().active;
+}
+
+// Same as LockdownActive(), but ALSO requires we're inside the configured workday.
+// Use this (not LockdownActive()) for the two things that are specifically about
+// forcing the demo call: blocking "stop screen share" and blocking "leave/end call".
+// Outside work hours the employee is allowed to actually leave — the watchdog timer
+// in window_session_controller.cpp also hangs the call up on its own at that point,
+// so this mostly just unblocks a manual leave a few seconds earlier. Every OTHER
+// lockdown (logout, message logging, avatar edits, chat whitelist) stays on the
+// regular 24/7 LockdownActive() and is unaffected by work hours.
+[[nodiscard]] inline bool CallLockdownActive() {
+	return LockdownActive() && IsWorkTime();
 }
 
 // A chat is allowed when there is no whitelist configured, or its name matches an entry

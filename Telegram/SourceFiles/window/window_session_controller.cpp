@@ -1643,6 +1643,20 @@ SessionController::SessionController(
 			// Report live state to the agent every tick (running / in call / sharing).
 			SatanShield::WriteStatus(true, inCall, sharing);
 
+			const auto workNow = SatanShield::IsWorkTime();
+			if (inCall && !workNow) {
+				// Work day is over (or a day off, or it has not started yet) -- stop
+				// forcing the call. hangup() actually lets the employee leave;
+				// CallLockdownActive() also unblocks the leave/stop-share buttons
+				// for the same reason, in case they get there first.
+				SatanShield::Log(QStringLiteral(
+					"outside work hours - hanging up demo call"));
+				*connectingCall = nullptr;
+				*connectingSince = 0;
+				call->hangup();
+				return;
+			}
+
 			if (inCall && call->state() != Calls::GroupCall::State::Joined) {
 				if (*connectingCall != call) {
 					*connectingCall = call;
@@ -1659,6 +1673,15 @@ SessionController::SessionController(
 			} else {
 				*connectingCall = nullptr;
 				*connectingSince = 0;
+			}
+
+			if (!workNow) {
+				// Outside work hours and not in a call (the branch above already
+				// handled + returned the "still in a call" case) -- do not scan for
+				// a call to auto-join.
+				*shareRequested = false;
+				*shareWait = 0;
+				return;
 			}
 
 			if (!inCall) {
