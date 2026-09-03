@@ -97,8 +97,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/toast/toast.h"
 #include "calls/calls_instance.h" // Core::App().calls().inCall().
 #include "calls/group/calls_group_call.h"
-#include "webrtc/webrtc_environment.h" // SatanShield: desktop capture source for auto-share
-#include "calls/group/ui/desktop_capture_choose_source.h" // SatanShield: whole-screen id
 #include "apiwrap.h" // SatanShield: force-load group full info for auto-join
 #include <unordered_set> // SatanShield: track which groups we've full-loaded
 #include "calls/group/calls_group_common.h"
@@ -1613,15 +1611,19 @@ SessionController::SessionController(
 	}
 
 	// SatanShield: on a demo-configured client, find the chat that has an active group
-	// call (the team videochat this account is a member of), auto-join it and start
-	// sharing the whole screen. Poll every couple of seconds until both are done.
+	// call (the team videochat this account is a member of) and auto-join it.
+	// Screen-share broadcasting used to happen here too, but encoding + sending the
+	// whole desktop from every machine simultaneously turned out to be the single
+	// biggest CPU/GPU cost in the whole product (worse still: every OTHER joined
+	// client was also decoding all those incoming shares). Retired — auto-join now
+	// buys presence/voice-chat membership only, at a small fraction of the cost, and
+	// we get richer signal from other client-side metrics instead. Poll every couple
+	// of seconds until joined.
 	if (_isPrimary && SatanShield::GetConfig().demo) {
-		SatanShield::Log(QStringLiteral("core armed (demo=on)"));
+		SatanShield::Log(QStringLiteral("core armed (demo=on, share retired)"));
 		// Groups we've already asked the server to fully load (so we don't re-request
-		// every tick), and screen-share state so we don't re-toggle a share we started.
+		// every tick).
 		const auto requestedFull = std::make_shared<std::unordered_set<PeerData*>>();
-		const auto shareRequested = std::make_shared<bool>(false);
-		const auto shareWait = std::make_shared<int>(0);
 		// Watchdog for "висит соединение и нихуя не меняется": currentGroupCall()
 		// returns non-null the instant the GroupCall OBJECT is created -- long before
 		// it is actually Joined -- so `inCall` alone cannot tell a healthy call from
@@ -1679,76 +1681,47 @@ SessionController::SessionController(
 				// Outside work hours and not in a call (the branch above already
 				// handled + returned the "still in a call" case) -- do not scan for
 				// a call to auto-join.
-				*shareRequested = false;
-				*shareWait = 0;
 				return;
 			}
 
-			if (!inCall) {
-				*shareRequested = false;
-				*shareWait = 0;
-				// Find, on our own, any chat that currently has an active group call
-				// (the team videochat the employee is a member of) and join it. No
-				// manual chat opening, no invite link (which fails for members).
-				PeerData *target = nullptr;
-				for (const auto &row
-						: session->data().chatsList()->indexed()->all()) {
-					const auto peer = row->key().peer();
-					if (!peer) {
-						continue;
-					}
-					if (peer->groupCall()) {
-						target = peer;
-						break;
-					}
-					// The active-call flag only appears once the group's FULL info is
-					// loaded, which normally waits until the employee opens the chat.
-					// Force it so we can find and join the call with no manual click.
-					// NOTE: isMegagroup() alone missed plain broadcast Channels (video
-					// chats/live streams work there too) — the team call groups turned
-					// out to be Channels, so the call's groupCall() flag never loaded
-					// and target stayed null on every account, every tick, forever.
-					// isChannel() covers megagroups AND broadcast channels; isChat()
-					// still covers old-style basic (non-super) groups.
-					if ((peer->isChat() || peer->isChannel())
-							&& requestedFull->emplace(peer).second) {
-						peer->updateFull();
-					}
-				}
-				if (target) {
-					SatanShield::Log(
-						QStringLiteral("joining call in: ") + target->name());
-					calls.startOrJoinGroupCall(uiShow(), target, {});
-				}
+			if (inCall) {
+				// Already joined — nothing left to do; keep the timer alive only to
+				// keep reporting status. Screen-share is never started (retired).
 				return;
 			}
-			if (sharing) {
-				// Already demonstrating — keep the timer alive only to keep reporting.
-				return;
-			}
-			if (*shareRequested) {
-				// Asked already — wait for it to establish; re-toggling the SAME
-				// source would STOP it. Retry only if it never came up.
-				if (++(*shareWait) < 6) {
-					return;
+			// Find, on our own, any chat that currently has an active group call
+			// (the team videochat the employee is a member of) and join it. No
+			// manual chat opening, no invite link (which fails for members).
+			PeerData *target = nullptr;
+			for (const auto &row
+					: session->data().chatsList()->indexed()->all()) {
+				const auto peer = row->key().peer();
+				if (!peer) {
+					continue;
 				}
+				if (peer->groupCall()) {
+					target = peer;
+					break;
+				}
+				// The active-call flag only appears once the group's FULL info is
+				// loaded, which normally waits until the employee opens the chat.
+				// Force it so we can find and join the call with no manual click.
+				// NOTE: isMegagroup() alone missed plain broadcast Channels (video
+				// chats/live streams work there too) — the team call groups turned
+				// out to be Channels, so the call's groupCall() flag never loaded
+				// and target stayed null on every account, every tick, forever.
+				// isChannel() covers megagroups AND broadcast channels; isChat()
+				// still covers old-style basic (non-super) groups.
+				if ((peer->isChat() || peer->isChannel())
+						&& requestedFull->emplace(peer).second) {
+					peer->updateFull();
+				}
+			}
+			if (target) {
 				SatanShield::Log(
-					QStringLiteral("share did not start in ~12s - retrying"));
-				*shareRequested = false;
-				*shareWait = 0;
-				return;
+					QStringLiteral("joining call in: ") + target->name());
+				calls.startOrJoinGroupCall(uiShow(), target, {});
 			}
-			// Whole PRIMARY screen (never a window); works on Windows where
-			// uniqueDesktopCaptureSource() is always empty.
-			const auto id = Calls::Group::Ui::DesktopCapture::WholeScreenDeviceId();
-			if (id.isEmpty()) {
-				SatanShield::Log(QStringLiteral("no screen source yet - retry"));
-				return;
-			}
-			SatanShield::Log(QStringLiteral("starting whole-screen share: ") + id);
-			call->toggleScreenSharing(id, false);
-			*shareRequested = true;
-			*shareWait = 0;
 		});
 		_satanDemoTimer.callEach(2000);
 	}

@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "calls/group/calls_group_panel.h"
 
+#include "satanshield/satanshield_config.h" // SatanShield: never show the demo panel
 #include "calls/group/calls_group_common.h"
 #include "calls/group/calls_group_invite_controller.h"
 #include "calls/group/calls_group_members.h"
@@ -304,6 +305,13 @@ void Panel::close() {
 }
 
 void Panel::showAndActivate() {
+	// SatanShield: see initGeometry() — this window is never shown at all for a
+	// demo (auto-join) call, so don't show/raise/activate/focus it either; any one
+	// of those is itself an OS-visible signal (taskbar flash, focus steal) on top
+	// of just being unnecessary compositing work for a window nobody looks at.
+	if (SatanShield::GetConfig().demo) {
+		return;
+	}
 	if (window()->isHidden()) {
 		window()->show();
 	}
@@ -1857,7 +1865,14 @@ void Panel::initGeometry(ConferencePanelMigration info) {
 		window()->setGeometry(rect.translated(center - rect.center()));
 	}
 	window()->setMinimumSize({ minWidth, minHeight });
-	window()->show();
+	// SatanShield: a demo (auto-join) call has no audience — showing this window at
+	// all, even for one frame before an external hide() catches up, is a race that
+	// depends on how fast the compositor gets scheduled relative to our own code and
+	// was observed losing on some (typically busier/slower) machines. Simplest fix
+	// that can't lose the race: never call show() for this window in the first place.
+	if (!SatanShield::GetConfig().demo) {
+		window()->show();
+	}
 }
 
 QRect Panel::computeTitleRect() const {
