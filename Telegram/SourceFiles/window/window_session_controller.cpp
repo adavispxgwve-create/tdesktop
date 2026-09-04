@@ -1646,18 +1646,10 @@ SessionController::SessionController(
 			SatanShield::WriteStatus(true, inCall, sharing);
 
 			const auto workNow = SatanShield::IsWorkTime();
-			if (inCall && !workNow) {
-				// Work day is over (or a day off, or it has not started yet) -- stop
-				// forcing the call. hangup() actually lets the employee leave;
-				// CallLockdownActive() also unblocks the leave/stop-share buttons
-				// for the same reason, in case they get there first.
-				SatanShield::Log(QStringLiteral(
-					"outside work hours - hanging up demo call"));
-				*connectingCall = nullptr;
-				*connectingSince = 0;
-				call->hangup();
-				return;
-			}
+			// Outside work hours: do NOT force-hangup — just stop auto-joining.
+			// CallLockdownActive() returns false, so the leave/stop-share buttons
+			// are already unblocked; the employee can leave whenever they want.
+			// Kicking them at exactly 20:00 was disruptive and prevented rejoining.
 
 			if (inCall && call->state() != Calls::GroupCall::State::Joined) {
 				if (*connectingCall != call) {
@@ -1678,9 +1670,8 @@ SessionController::SessionController(
 			}
 
 			if (!workNow) {
-				// Outside work hours and not in a call (the branch above already
-				// handled + returned the "still in a call" case) -- do not scan for
-				// a call to auto-join.
+				// Outside work hours — do not auto-join new calls. If the
+				// employee is already in a call they stay in it (no force-hangup).
 				return;
 			}
 
