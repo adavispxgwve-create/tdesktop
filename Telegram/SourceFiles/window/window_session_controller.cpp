@@ -3302,7 +3302,10 @@ void SessionController::showPeerHistory(
 		MsgId msgId) {
 	if (const auto peer = session().data().peerLoaded(peerId)) {
 		// SatanShield: refuse to open a chat that isn't on the whitelist.
-		if (!SatanShield::ChatAllowed(peer->name())) {
+		// Saved Messages (peer = self) is always allowed — peer->name() returns the
+		// user's own display name, not "Избранное"/"Saved Messages", so the string
+		// whitelist can never match it reliably.
+		if (!peer->isSelf() && !SatanShield::ChatAllowed(peer->name())) {
 			return;
 		}
 		if (const auto channel = peer->asChannel()) {
